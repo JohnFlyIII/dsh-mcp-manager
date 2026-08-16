@@ -12,6 +12,7 @@ The built-in `@deepseek-ai/dsh-mcp-client` only accepts a static `headers` confi
 - **stdio local processes**: run `npx` / `uvx` / `python` etc. directly; the plugin speaks JSON-RPC over the child's stdin/stdout (spawns the process, reconnects, and reaps it on exit) — no remote server or auth required. Windows `.cmd` shims (e.g. `npx.cmd`) are resolved through `cmd.exe`.
 - **Edit-in-place**: rename a server, switch stdio ↔ HTTP, or change auth/headers without deleting and re-adding it.
 - **Tool registration** with the same `mcp__<server>__<rawName>` naming convention as the built-in client, including strict-schema sanitization for the DSH tool registry and `isConcurrencySafe` marking.
+- **Workspace isolation**: declare per-project servers in `<workspace>/.dsh/dshmm/mcp.json` — their tools register only into that workspace's sessions, and you can mask specific global servers per workspace.
 
 ## Requirements
 
@@ -33,6 +34,7 @@ Then restart `dsh --profile web` and refresh the page. The package declares a `d
 
 1. Open **Settings → MCP** in the DSH web UI.
 2. **＋ Add MCP server** (and later **编辑 / Edit** to change it):
+   - **Scope (作用域)**: `user` — a global server available in every workspace; or `workspace` — a server bound to one workspace (its config lives in that workspace's `.dsh/dshmm/mcp.json`). Pick the workspace from the second dropdown.
    - **HTTP**: name (becomes the `mcp__<name>__*` prefix), URL, auth mode (OAuth or static token), and optional headers (`headers` direct values, `headerEnv` values read from env vars).
    - **stdio**: name, command (e.g. `npx`), args (one per row), env vars (key/value rows), and optional working directory.
 3. OAuth servers: click **去认证 (Authenticate)** → the browser opens the server's login page → after consent you are redirected back and the tools are registered immediately.
@@ -51,6 +53,28 @@ mcp__odin__execute_tool     mcp__odin__list_tool_scopes
 
 Tool results are rendered as native text content; `isError` results surface through the registry's error path.
 
+### Workspace isolation
+
+Global servers (added in **Settings → MCP**) are visible in every workspace. Use the **workspace dropdown** at the top of the Settings → MCP page to switch between "global" and a specific workspace; when a workspace is selected you see both its own servers and the global servers (with a **隐藏 / Hide** toggle to mask each global server). Workspace servers live in `<workspace>/.dsh/dshmm/mcp.json` (Claude/Codex-style):
+
+```json
+{
+  "mcpServers": {
+    "filesystem": { "type": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "."] },
+    "unity-mcp": { "type": "http", "url": "http://localhost:8090/", "authMode": "static", "tokenEnv": "UNITY_MCP_TOKEN" }
+  },
+  "exclude": ["github"]
+}
+```
+
+- Workspace servers can be **added / edited / deleted in the UI** for workspaces registered in DSH (the **＋** button while a workspace is selected writes to that workspace's `mcp.json`). Hand-editing the file also works — creating or changing it is hot-reloaded. Invalid JSON is shown as an error while the last valid live configuration stays active.
+- `type` defaults to `http`; a stdio server's `cwd` defaults to the workspace root. `headers` / `headerEnv` / `env` / `args` follow the same shapes as the Settings form.
+- A workspace server's tools register **only** into sessions whose working directory resolves to that workspace; another workspace's agents never see them. Global servers stay visible everywhere unless masked.
+- `exclude` lists global servers to hide in this workspace (their tools are masked through the tool registry's per-agent restriction). Toggle it via the **隐藏 / Hide** checkbox on each global server in the workspace view.
+- `serverName` must be unique across global + all workspace sources; a later duplicate is flagged as a conflict and skipped (shown in the UI).
+- Config is re-read on each new session and hot-reloaded via a file watcher.
+- Workspace servers support **stdio**, **HTTP static-token** (`tokenEnv`), and **HTTP OAuth** — the same PKCE + dynamic client registration flow as global servers. Workspace OAuth tokens persist in `~/.dsh/mcp-manager.json` (never in the declarative `mcp.json`); each workspace server row exposes a **去认证 / Authenticate** button for OAuth servers.
+
 ## How it works
 
 | Piece | Mechanism |
@@ -61,12 +85,13 @@ Tool results are rendered as native text content; `isError` results surface thro
 | MCP transport (HTTP) | Streamable HTTP (JSON-RPC over POST, `Mcp-Session-Id`, SSE or JSON responses); custom `headers`/`headerEnv` merged into every request |
 | MCP transport (stdio) | `child_process.spawn` a local command, JSON-RPC over stdin/stdout (newline-delimited); reconnect reaps the old process first. On Windows it spawns through `cmd.exe` so `.cmd` shims resolve |
 | Tool schema | Server JSON Schemas are sanitized to the registry's supported raw subset (unsupported vocabulary degrades to unconstrained) |
+| Workspace isolation | `agents.create`/`resume` are decorated to compose a per-agent setup that registers `<workspace>/.dsh/dshmm/mcp.json` tools into the agent scope and applies `tools.restrict({ deny })` for `exclude` |
 | Hot path | Same-origin JSON API under `/mcp-manager/api/*` between the settings page and the host half |
 
 ## Limitations
 
 - `resources` and `prompts` MCP capabilities are not bridged (tools only).
-- OAuth tokens live in a plain JSON file under `~/.dsh` — treat the file as a secret. Static bearer tokens and `headerEnv` values are read from environment variables and never persisted.
+- OAuth tokens live in a plain JSON file under `~/.dsh` — treat the file as a secret. Static bearer tokens and `headerEnv` values are read from environment variables and never persisted. Workspace OAuth tokens live in the same state file, never in the workspace's `mcp.json`.
 - stdio servers run as long-lived child processes tied to the plugin lifecycle. On POSIX `args` are whitespace-tokenized (quotes protect args with spaces) with no shell expansion; on Windows the command line is passed to `cmd.exe`, so shell metacharacters (`&`, `|`, `>`, `%VAR%`) are interpreted — prefer absolute paths and quote args containing spaces there.
 - One OAuth client registration per server per GUI origin; moving the GUI to a new origin re-registers automatically on the next login.
 
