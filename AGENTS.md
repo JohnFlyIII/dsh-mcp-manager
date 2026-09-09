@@ -9,7 +9,7 @@ Plugin **source** is two files — keep it that way unless a refactor is explici
 - `lib/index.js` — **host half** (Node.js): HTTP API on the DSH GUI webserver under `/mcp-manager/api/*`, OAuth flow (redirect receiver at `/mcp-manager/callback/:id`), both MCP transports, tool registration into `ctx.tools`, state persistence.
 - `lib/client.js` — **client half** (browser): a `window.__ModuleLoader__.load(...)` factory using `react.createElement` (no JSX, no bundler). Registers the Settings → MCP tab via the `settings.section` slot. UI strings are Simplified Chinese.
 - `cordis.patch.yml` — bundle patch that activates the plugin row (`dsh.bundle.patch` in package.json).
-- `test/*.test.js` — `node --test` unit tests over the host half's exported pure helpers (not shipped: `files` lists only `lib/*`).
+- `test/*.test.js` — `node --test` unit tests over the host half's exported helpers plus a stubbed-context `apply()` API smoke test (not shipped: `files` lists only `lib/*`).
 - `README.md` / `README.zh-CN.md` — keep both in sync on behavior changes.
 
 ## Architecture rules
@@ -19,7 +19,8 @@ Plugin **source** is two files — keep it that way unless a refactor is explici
 - Token state (`~/.dsh/mcp-manager.json`) contains secrets — never log tokens; treat the file as sensitive.
 - Tool name convention `mcp__<server>__<raw>` with `[^A-Za-z0-9_-]` → `_` normalization and a 64-char cap (sha256 suffix on overflow) — must match the built-in `@deepseek-ai/dsh-mcp-client`.
 - Tool schemas must pass through `sanitizeValue`/`convParams` (registry accepts only a raw JSON-Schema subset; unsupported vocabulary degrades to unconstrained).
-- stdio transport: `child_process.spawn`, newline-delimited JSON-RPC over stdin/stdout. Reconnect must reap the old child first; `ctx.effect` teardown kills all children on unload. `args` are quote-aware tokenized with **no shell expansion**.
+- stdio transport: `child_process.spawn`, newline-delimited JSON-RPC over stdin/stdout. Reconnect must reap the old child first; `ctx.effect` teardown kills all children on unload. `args` are quote-aware tokenized with **no shell expansion**. On Windows `shell: true` makes Node join command + args with bare spaces and add no quoting, so every token must pass through `quoteWindowsToken` (idempotent for already-quoted values) or `cmd.exe` truncates paths containing spaces.
+- Loaded state is migrated once in `apply()` via `migrateLoadedState`: missing or duplicate `server.id` values are backfilled (live status and `/servers/:id/*` are id-keyed, so a missing id 404s every id-addressed API) and legacy `[{ name, value }]` env/header arrays are normalized to maps. Persist immediately when it reports a change.
 - HTTP transport: streamable HTTP (JSON-RPC POST, `Mcp-Session-Id` header, SSE-or-JSON response fallback in `parseRpc`). A 401 triggers one `refresh_token` retry, then reconnect.
 - Disable/enable is global per profile: disable unregisters tools + drops the connection but persists config and tokens; enable reconnects without re-auth.
 
@@ -45,7 +46,7 @@ then restart `dsh --profile web` and reload the page. The API liveness probe is 
 - No TypeScript, no bundler, no framework — plain modern JavaScript in both files.
 - Host half: `ctx.logger` (`info`/`warn`/`error`) with `mcp-manager:` prefix; never `console.log`.
 - Client half: `react` obtained via the factory's `require("react")`; styles in the injected `<style>` string using `--dsw-alias-*` CSS variables with hardcoded fallbacks.
-- Bump `version` in package.json on user-visible changes (recent history: 0.1.0 OAuth, 0.2.0 stdio, 0.3.0 enable/disable, 0.4.0 Windows stdio + edit + Codex-style HTTP config, 0.5.0 workspace isolation, 0.6.0 on-demand broker, 0.7.0 MCP image-block projection).
+- Bump `version` in package.json on user-visible changes (recent history: 0.1.0 OAuth, 0.2.0 stdio, 0.3.0 enable/disable, 0.4.0 Windows stdio + edit + Codex-style HTTP config, 0.5.0 workspace isolation, 0.6.0 on-demand broker, 0.7.0 MCP image-block projection, 0.7.1 legacy-state migration + Windows command quoting).
 
 ## Release
 
