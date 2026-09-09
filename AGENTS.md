@@ -4,11 +4,12 @@ DSH plugin: MCP server manager for DeepSeek Harness (web profile). Settings → 
 
 ## Layout
 
-The entire plugin is two files — keep it that way unless a refactor is explicitly requested:
+Plugin **source** is two files — keep it that way unless a refactor is explicitly requested (tests live under `test/`):
 
 - `lib/index.js` — **host half** (Node.js): HTTP API on the DSH GUI webserver under `/mcp-manager/api/*`, OAuth flow (redirect receiver at `/mcp-manager/callback/:id`), both MCP transports, tool registration into `ctx.tools`, state persistence.
 - `lib/client.js` — **client half** (browser): a `window.__ModuleLoader__.load(...)` factory using `react.createElement` (no JSX, no bundler). Registers the Settings → MCP tab via the `settings.section` slot. UI strings are Simplified Chinese.
 - `cordis.patch.yml` — bundle patch that activates the plugin row (`dsh.bundle.patch` in package.json).
+- `test/*.test.js` — `node --test` unit tests over the host half's exported pure helpers (not shipped: `files` lists only `lib/*`).
 - `README.md` / `README.zh-CN.md` — keep both in sync on behavior changes.
 
 ## Architecture rules
@@ -24,7 +25,14 @@ The entire plugin is two files — keep it that way unless a refactor is explici
 
 ## Commands
 
-No build/test/lint scripts — package.json has none. It's plain ESM with zero dependencies (Node built-ins only; Node `^22.19 || >=24`). Verify changes by installing into a live DSH web profile:
+No build/lint scripts — package.json has none. It's plain ESM with zero dependencies (Node built-ins only; Node `^22.19 || >=24`). Unit tests run with the Node test runner and no package script:
+
+```sh
+node --test          # default discovery picks up test/*.test.js
+node --test test/mcp-image-projection.test.js   # single file
+```
+
+Verify behavior changes by installing into a live DSH web profile:
 
 ```sh
 npx -p @deepseek-ai/dsh dsh plugin --profile web add <path-or-repo>
@@ -37,7 +45,7 @@ then restart `dsh --profile web` and reload the page. The API liveness probe is 
 - No TypeScript, no bundler, no framework — plain modern JavaScript in both files.
 - Host half: `ctx.logger` (`info`/`warn`/`error`) with `mcp-manager:` prefix; never `console.log`.
 - Client half: `react` obtained via the factory's `require("react")`; styles in the injected `<style>` string using `--dsw-alias-*` CSS variables with hardcoded fallbacks.
-- Bump `version` in package.json on user-visible changes (recent history: 0.1.0 OAuth, 0.2.0 stdio, 0.3.0 enable/disable, 0.4.0 Windows stdio + edit + Codex-style HTTP config).
+- Bump `version` in package.json on user-visible changes (recent history: 0.1.0 OAuth, 0.2.0 stdio, 0.3.0 enable/disable, 0.4.0 Windows stdio + edit + Codex-style HTTP config, 0.5.0 workspace isolation, 0.6.0 on-demand broker, 0.7.0 MCP image-block projection).
 
 ## Release
 

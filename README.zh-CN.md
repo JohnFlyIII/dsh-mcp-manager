@@ -54,7 +54,7 @@ mcp__odin__search_tools     mcp__odin__describe_tool
 mcp__odin__execute_tool     mcp__odin__list_tool_scopes
 ```
 
-工具结果投影回 DSH 原生内容块（运行时支持时保留富内容）；MCP `isError` 结果走注册表错误路径。
+工具结果投影回 DSH 原生内容块；MCP `isError` 结果走注册表错误路径。图片块（`{ type: 'image', data, mimeType }`）**绝不原样透传**——原始 MCP 图片块没有 `attachment`，下一轮请求就会让会话崩溃。渲染始终文本优先：当当前模型路由声明支持图片输入时，host 会把图片存入 DSH 持久化 attachment 存储，该块变成真正的 `{ type: 'image', attachment }`；其余情况（无 attachment 存储、模型不支持图片、base64 非规范、媒体类型不在 PNG/JPEG/WebP/GIF 白名单）一律降级为 `[image unavailable: …]` 文本占位符。文本块按原顺序保留；经 `mcp_execute_tool` 返回的结果同样会做这层清洗。
 
 按需模式开启后，Native agent 只看到三个 MCP broker 工具：
 
@@ -96,6 +96,7 @@ mcp__odin__execute_tool     mcp__odin__list_tool_scopes
 | MCP 传输（HTTP） | Streamable HTTP（POST JSON-RPC、`Mcp-Session-Id`、SSE/JSON 双格式响应）；每次请求合并自定义 `headers`/`headerEnv` |
 | MCP 传输（stdio） | `child_process.spawn` 拉起本地命令，JSON-RPC over stdin/stdout（换行分隔），重连时先回收旧进程。Windows 下经 `cmd.exe` 启动以解析 `.cmd` shim |
 | 工具 schema | 服务器 JSON Schema 清洗为注册表支持的 raw 子集（不支持的关键字降级为无约束） |
+| 图片结果 | `output.render` 文本优先；`execute(args, exec)` 暂存投影，`finalizeContent` 仅在路由模型声明图片输入时装上持久化 DSH attachment，其余情况降级为文本占位符 |
 | 按需 broker | Profile 开关注册三个 broker 工具，在提示词组装后过滤原始 `mcp__*` schema，并用执行守卫确保只有 `mcp_execute_tool` 能调用隐藏工具 |
 | 工具列表变化 | stdio 通知与 Streamable HTTP SSE 通道触发重新读取 `tools/list`；未变化的注册保持挂载 |
 | 工作区隔离 | 装饰 `agents.create`/`resume`，组合出 per-agent setup：把 `<workspace>/.dsh/dshmm/mcp.json` 的工具注册进 agent 作用域，并按 `exclude` 应用 `tools.restrict({ deny })` |
