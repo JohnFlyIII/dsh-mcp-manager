@@ -31,7 +31,18 @@ function makeCtx() {
     webServer: { register: (route) => { routes.push(route); return () => {}; } },
     get: () => undefined,
     on: () => () => {},
-    inject: () => () => {},
+    // The plugin injects `webServer` lazily (it is optional), so hand the
+    // callback a child ctx exposing the stubbed webserver.
+    inject: (names, callback) => {
+      if (typeof callback === 'function' && names.includes('webServer')) {
+        callback({
+          webServer: ctx.webServer,
+          get: () => undefined,
+          effect: (fn) => { const dispose = fn(); return () => { if (typeof dispose === 'function') dispose(); }; },
+        });
+      }
+      return { dispose: () => {} };
+    },
     effect: (fn) => { const dispose = fn(); return () => { if (typeof dispose === 'function') dispose(); }; },
   };
   apply(ctx);

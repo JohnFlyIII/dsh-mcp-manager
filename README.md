@@ -18,7 +18,7 @@ The built-in `@deepseek-ai/dsh-mcp-client` only accepts a static `headers` confi
 
 ## Requirements
 
-- DeepSeek Harness with the `web` profile (`npx @deepseek-ai/dsh web`)
+- DeepSeek Harness, web profile for the Settings → MCP page (`npx @deepseek-ai/dsh web`). On a profile without a GUI webserver (headless/tui) the plugin still registers MCP tools and connects servers — only the settings page is missing.
 - Node.js `^22.19` or `>=24`; pnpm on your `PATH`
 - Windows 10/11: stdio commands are launched via `cmd.exe` so `.cmd` shims (`npx`, `uvx`) resolve correctly
 
@@ -101,6 +101,7 @@ Global servers (added in **Settings → MCP**) are visible in every workspace. U
 | On-demand broker | A profile setting installs three broker tools, filters raw `mcp__*` schemas after prompt assembly, and guards execution so only `mcp_execute_tool` may dispatch a hidden MCP tool |
 | Tool list changes | stdio notifications and the Streamable HTTP SSE channel refresh the live `tools/list`; unchanged registrations remain mounted |
 | Workspace isolation | `agents.create`/`resume` are decorated to compose a per-agent setup that registers `<workspace>/.dsh/dshmm/mcp.json` tools into the agent scope and applies `tools.restrict({ deny })` for `exclude` |
+| Harness compatibility | The composed agent setup takes the Agent from the setup callback's explicit second argument (DSH 0.1.5-rc.*) and only falls back to the legacy `agent` context accessor. Newer harness builds removed that accessor, so reading `ctx.agent` there throws `cannot get property "agent" without inject` and fails every `agents.resume`/`create`. The GUI webserver is injected lazily, so a profile without one keeps its MCP tools instead of leaving a pending entry |
 | Hot path | Same-origin JSON API under `/mcp-manager/api/*` between the settings page and the host half |
 
 ## Limitations
