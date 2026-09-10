@@ -59,16 +59,17 @@ async function request(handler, method, path, body) {
 }
 
 
-it('language defaults to Chinese, validates input, and persists across apply() restarts', async () => {
+it('language is unset by default, validates input, and persists across apply() restarts', async () => {
   const handler = makeCtx().routes[0].handler;
   const get = (h = handler) => request(h, 'GET', '/mcp-manager/api/settings');
   const post = (body) => request(handler, 'POST', '/mcp-manager/api/settings/language', body);
-  assert.equal((await get()).json.language, 'zh');
+  assert.equal((await get()).json.language, null);
   for (const body of [{}, null, { language: 'fr' }, { language: 1 }, { language: 'EN' }]) {
     assert.equal((await post(body)).code, 400);
   }
-  assert.equal((await get()).json.language, 'zh');
+  assert.equal((await get()).json.language, null);
   assert.equal((await post({ language: 'en' })).code, 200);
+  assert.equal((await get()).json.language, 'en');
   assert.equal(JSON.parse(readFileSync(statePath, 'utf8')).language, 'en');
   assert.equal((await get(makeCtx().routes[0].handler)).json.language, 'en');
   assert.equal((await request(handler, 'POST', '/mcp-manager/api/settings/on-demand', { enabled: true })).code, 200);

@@ -6,14 +6,14 @@ import { it } from 'node:test';
 const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8');
 
 // Run the real module factory with a tiny hook harness; no browser or dependencies.
-function mount(fetch) {
+function mount(fetch, navigator) {
   let exported, Section;
   let states = [], cursor = 0, effects = [], initialized = false;
   const react = {
     createElement: (type, props, ...children) => ({ type, props: props ?? {}, children: children.flat(Infinity) }),
     useState: (initial) => {
       const index = cursor++;
-      if (!(index in states)) states[index] = initial;
+      if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial;
       return [states[index], (value) => { states[index] = value; }];
     },
     useEffect: (effect) => { if (!initialized) effects.push(effect); },
@@ -22,6 +22,7 @@ function mount(fetch) {
   runInNewContext(source, {
     window: { __ModuleLoader__: { load: ({ factory }) => { exported = factory(() => react); } } },
     fetch,
+    ...(navigator === undefined ? {} : { navigator }),
   });
   exported.apply({ slots: { inject: (_name, cb) => cb(), register: (_spec, component) => { Section = component; } } });
   return {
@@ -41,6 +42,46 @@ function nodes(tree) {
 const text = (tree) => typeof tree === 'string' ? tree : tree?.children?.map(text).join(' ') ?? '';
 const selector = (tree) => nodes(tree).find((node) => node.type === 'select');
 const content = (tree) => nodes(tree).find((node) => typeof node.type === 'function');
+
+for (const [name, navigator, saved, expected] of [
+  ['English browser', { language: 'en-US' }, null, 'en'],
+  ['Chinese browser', { language: 'zh-CN' }, null, 'zh'],
+  ['explicit Chinese overrides English browser', { language: 'en-US' }, 'zh', 'zh'],
+  ['explicit English overrides Chinese browser', { language: 'zh-CN' }, 'en', 'en'],
+  ['other locales use English', { language: 'fr-FR' }, null, 'en'],
+  ['language takes precedence over languages', { language: 'en-US', languages: ['zh-CN'] }, null, 'en'],
+  ['empty language uses languages fallback', { language: '', languages: ['en-GB'] }, null, 'en'],
+  ['missing language uses languages fallback', { languages: ['zh-TW'] }, null, 'zh'],
+  ['no navigator uses Chinese', undefined, null, 'zh'],
+  ['empty locale uses Chinese', { language: '', languages: [] }, null, 'zh'],
+]) {
+  it(`renders the expected UI: ${name}`, async () => {
+    const calls = [];
+    const app = mount(async (url, options) => {
+      calls.push([url, options]);
+      return response({ language: saved });
+    }, navigator);
+    const initial = app.render();
+    if (saved === null) assert.equal(selector(initial).props.value, expected);
+    app.effects();
+    await settle();
+    const tree = app.render();
+    assert.equal(selector(tree).props.value, expected);
+    assert.match(text(tree), expected === 'en' ? /Language/ : /语言/);
+    const body = content(tree);
+    app.reset();
+    assert.match(text(app.render(body.type, body.props)), expected === 'en' ? /MCP servers/ : /MCP 服务器/);
+    assert.equal(calls.length, 1, 'automatic detection must not persist a choice');
+    assert.equal(calls[0][0], '/mcp-manager/api/settings');
+    assert.notEqual(calls[0][1]?.method, 'POST');
+  });
+}
+
+it('renders settings load failures in the browser language', async () => {
+  const app = mount(async () => response({}, false, 500), { language: 'en-US' });
+  app.render(); app.effects(); await settle();
+  assert.match(text(app.render()), /Could not load language \(HTTP 500\)/);
+});
 
 it('loads the saved language, switches through the API, and keeps the old choice on failure', async () => {
   const calls = [];

@@ -16,7 +16,7 @@
 - **可选按需 broker**：模型侧固定只暴露 `mcp_search_tools`、`mcp_describe_tool`、`mcp_execute_tool`，不再每轮发送所有 `mcp__*` schema。默认关闭，必须手动开启。 `mcp_search_tools` 是零依赖词法排序器（BM25 + CJK/别名/模糊，且支持列目录兜底）。
 - **稳定刷新工具列表**：stdio 与 Streamable HTTP 收到 `notifications/tools/list_changed` 后，只更新新增、删除或 schema 变化的注册，未变化工具保持挂载。
 
-设置 → MCP 顶部的**语言**选择器提供 **中文 / English**，默认仍为中文。选择通过宿主 API 保存到 `~/.dsh/mcp-manager.json`，在当前 DSH 配置档内生效，刷新页面或重启 DSH 后仍保留。标签、表单、状态徽标和确认提示均支持双语；服务器返回的诊断信息保持原文。
+设置 → MCP 顶部的**语言**选择器提供 **中文 / English**，未保存选择时，默认跟随系统/浏览器语言：中文区域设置（`zh*`）使用中文，其他语言使用英文。优先读取 `navigator.language`，为空时使用 `navigator.languages[0]`；无法获取语言时回退到中文。手动选择始终优先。选择通过宿主 API 保存到 `~/.dsh/mcp-manager.json`，在当前 DSH 配置档内生效，刷新页面或重启 DSH 后仍保留。标签、表单、状态徽标和确认提示均支持双语；服务器返回的诊断信息保持原文。
 
 ## 前置要求
 
