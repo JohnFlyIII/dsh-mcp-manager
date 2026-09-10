@@ -16,7 +16,9 @@ The built-in `@deepseek-ai/dsh-mcp-client` only accepts a static `headers` confi
 - **Opt-in on-demand broker**: keep the model-facing MCP surface fixed at `mcp_search_tools`, `mcp_describe_tool`, and `mcp_execute_tool` instead of sending every `mcp__*` schema on every Native-mode request. It is disabled by default. `mcp_search_tools` is a zero-dependency lexical ranker (BM25 + CJK/alias/fuzzy, plus a catalog-listing fallback).
 - **Stable tool refresh**: `notifications/tools/list_changed` refreshes only added, removed, or schema-changed registrations for both stdio and Streamable HTTP servers.
 
-The **Language** selector at the top of Settings → MCP offers **中文 / English**. Without a saved choice, the default follows the system/browser language: Chinese locales (`zh*`) use Chinese; all other locales use English. Detection uses `navigator.language`, falling back to `navigator.languages[0]`; if no locale is available, it uses Chinese. An explicit choice always takes precedence. Your choice is saved through the host API in `~/.dsh/mcp-manager.json`, applies to this DSH profile, and survives page reloads and DSH restarts. Labels, forms, status badges, and confirmations are translated; server-supplied diagnostics remain in their original language.
+The MCP UI follows DSH's language preference in **Settings → General → Language** through the `mcp` locale namespace. DSH owns browser fallback, preference persistence, and live language updates; the plugin has no separate language selector or language API. Labels, forms, status badges, and confirmations are translated; server-supplied diagnostics remain in their original language. Legacy `language` values in `~/.dsh/mcp-manager.json` are ignored and left untouched.
+
+Version 0.11.0 requires `@deepseek-ai/dsh-client-locale` and the slot system's locale `t` prop. The compatibility runs listed below predate this integration and do not verify live locale switching on every listed DSH release. Recheck Settings → MCP while switching DSH's language before deploying to an older web profile.
 
 ## Requirements
 
@@ -124,6 +126,8 @@ What is verified today, and what is not:
 | Automated (unit + contract) | verified | `npm test` (`node --test`) — host-half exported helpers plus a stubbed-context `apply()` API smoke test. Tests never write to a real `~/.dsh` |
 | Disposable-profile runtime | verified | Scratch `$DSH_HOME`: install via the official CLI, boot `web` (`GET /mcp-manager/api/ping` → 200) and `headless` (agent setup applies; on `0.1.5-*` a registered `mcp__<server>__<tool>` is visible to the agent), once per declared `dshReleases` entry, then delete the profile |
 | Real profile, store page, public artifacts | not verified here | E4/E5 acceptance is owned by the operator, not by this repository |
+
+For 0.11.0, the locale contract is covered by the stubbed client/API tests. A disposable-profile CLI install succeeded, but the web boot was blocked by the sandbox (`listen EPERM 127.0.0.1:3080`), so live browser language switching remains unverified.
 
 Next gate: a real-profile readback (resolved version, running process, visible Settings → MCP page) plus, for distribution, an unauthenticated readback of the tagged artifacts. Until those are recorded, read the compatibility declarations as disposable-profile verification only — not as proof of a live installation. The same applies to listing status on DSH STORE.
 

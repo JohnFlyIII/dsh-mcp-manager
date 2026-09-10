@@ -6,7 +6,11 @@ import { it } from 'node:test';
 const source = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8');
 
 // Run the real module factory with a tiny hook harness; no browser or dependencies.
-function mount(fetch, navigator) {
+function mount(fetch, language = "en") {
+  let dictionaries, spec, disposed = false;
+  const effectLabels = [];
+  const t = (key, values = {}) => (dictionaries[language]?.[key] ?? dictionaries.en[key] ?? key)
+    .replace(/\{(\w+)\}/g, (match, name) => String(values[name] ?? match));
   let exported, Section;
   let states = [], cursor = 0, effects = [], initialized = false;
   const react = {
@@ -22,11 +26,33 @@ function mount(fetch, navigator) {
   runInNewContext(source, {
     window: { __ModuleLoader__: { load: ({ factory }) => { exported = factory(() => react); } } },
     fetch,
-    ...(navigator === undefined ? {} : { navigator }),
+    setInterval: () => 1,
+    clearInterval: () => {},
   });
-  exported.apply({ slots: { inject: (_name, cb) => cb(), register: (_spec, component) => { Section = component; } } });
+  let dispose;
+  exported.apply({
+    effect(fn, label) { effectLabels.push(label); dispose = fn(); },
+    locale: {
+      register(ns, table) {
+        assert.equal(ns, 'mcp');
+        dictionaries = table;
+        return () => { disposed = true; };
+      },
+      bind(ns) { assert.equal(ns, 'mcp'); return t; },
+    },
+    slots: {
+      inject: (_name, cb) => cb(),
+      register: (options, component) => { spec = options; Section = component; },
+    },
+  });
   return {
-    render(component = Section, props = {}) {
+    get dictionaries() { return dictionaries; },
+    get spec() { return spec; },
+    get inject() { return exported.inject; },
+    effectLabels,
+    dispose() { dispose(); assert.equal(disposed, true); },
+    setLocale(next) { language = next; },
+    render(component = Section, props = { t }) {
       cursor = 0;
       return component(props);
     },
@@ -40,107 +66,51 @@ function nodes(tree) {
   return tree && typeof tree === 'object' ? [tree, ...tree.children.flatMap(nodes)] : [];
 }
 const text = (tree) => typeof tree === 'string' ? tree : tree?.children?.map(text).join(' ') ?? '';
-const selector = (tree) => nodes(tree).find((node) => node.type === 'select');
 const content = (tree) => nodes(tree).find((node) => typeof node.type === 'function');
 
-for (const [name, navigator, saved, expected] of [
-  ['English browser', { language: 'en-US' }, null, 'en'],
-  ['Chinese browser', { language: 'zh-CN' }, null, 'zh'],
-  ['explicit Chinese overrides English browser', { language: 'en-US' }, 'zh', 'zh'],
-  ['explicit English overrides Chinese browser', { language: 'zh-CN' }, 'en', 'en'],
-  ['other locales use English', { language: 'fr-FR' }, null, 'en'],
-  ['language takes precedence over languages', { language: 'en-US', languages: ['zh-CN'] }, null, 'en'],
-  ['empty language uses languages fallback', { language: '', languages: ['en-GB'] }, null, 'en'],
-  ['missing language uses languages fallback', { languages: ['zh-TW'] }, null, 'zh'],
-  ['no navigator uses Chinese', undefined, null, 'zh'],
-  ['empty locale uses Chinese', { language: '', languages: [] }, null, 'zh'],
-]) {
-  it(`renders the expected UI: ${name}`, async () => {
-    const calls = [];
-    const app = mount(async (url, options) => {
-      calls.push([url, options]);
-      return response({ language: saved });
-    }, navigator);
-    const initial = app.render();
-    if (saved === null) assert.equal(selector(initial).props.value, expected);
-    app.effects();
-    await settle();
-    const tree = app.render();
-    assert.equal(selector(tree).props.value, expected);
-    assert.match(text(tree), expected === 'en' ? /Language/ : /语言/);
-    const body = content(tree);
-    app.reset();
-    assert.match(text(app.render(body.type, body.props)), expected === 'en' ? /MCP servers/ : /MCP 服务器/);
-    assert.equal(calls.length, 1, 'automatic detection must not persist a choice');
-    assert.equal(calls[0][0], '/mcp-manager/api/settings');
-    assert.notEqual(calls[0][1]?.method, 'POST');
-  });
-}
-
-it('renders settings load failures in the browser language', async () => {
-  const app = mount(async () => response({}, false, 500), { language: 'en-US' });
-  app.render(); app.effects(); await settle();
-  assert.match(text(app.render()), /Could not load language \(HTTP 500\)/);
-});
-
-it('loads the saved language, switches through the API, and keeps the old choice on failure', async () => {
-  const calls = [];
-  let fail = false;
-  const app = mount(async (url, options) => {
-    calls.push([url, options]);
-    return options?.method === 'POST'
-      ? response(JSON.parse(options.body), !fail, fail ? 500 : 200)
-      : response({ language: 'en' });
-  });
-  assert.equal(selector(app.render()).props.disabled, true);
-  app.effects();
-  await settle();
-  let tree = app.render();
-  assert.equal(selector(tree).props.value, 'en');
-  assert.equal(content(tree).props.t('servers'), 'MCP servers');
-  await selector(tree).props.onChange({ target: { value: 'zh' } });
-  tree = app.render();
-  assert.equal(content(tree).props.t('servers'), 'MCP 服务器');
-  assert.equal(calls.at(-1)[0], '/mcp-manager/api/settings/language');
-  assert.equal(calls.at(-1)[1].body, '{"language":"zh"}');
-  fail = true;
-  await selector(tree).props.onChange({ target: { value: 'en' } });
-  tree = app.render();
-  assert.equal(selector(tree).props.value, 'zh');
-  assert.match(text(tree), /语言设置失败 \(HTTP 500\)/);
-  assert.equal(selector(tree).props.disabled, false);
-});
-
-it('all translation keys have Chinese and English text, including interpolation', async () => {
-  const table = runInNewContext('(' + source.match(/const STRINGS = (\{[\s\S]*?\n\t\t\});/)[1] + ')');
-  assert.deepEqual(Object.keys(table.zh).sort(), Object.keys(table.en).sort());
-  const translations = {};
-  for (const language of ['zh', 'en']) {
-    const app = mount(async () => response({ language }));
-    app.render(); app.effects(); await settle();
-    const t = content(app.render()).props.t;
-    translations[language] = t;
-    const keys = [...source.matchAll(/\bt\("([\w-]+)"/g)].map((match) => match[1]);
-    for (const key of keys) assert.notEqual(t(key), key, `${language}: ${key}`);
-    assert.equal(t('unknown-status'), 'unknown-status');
-    assert.ok(t('confirmDelete', { name: '$& {name}' }).includes('$& {name}'));
+it('registers balanced mcp dictionaries with effect cleanup and the locale slot seat', () => {
+  const app = mount(async () => response({}));
+  assert.deepEqual(Object.keys(app.dictionaries.zh).sort(), Object.keys(app.dictionaries.en).sort());
+  assert.equal(app.spec.name, 'settings.section');
+  assert.equal(app.spec.locale, 'mcp');
+  assert.equal(app.spec.label(), 'MCP');
+  assert.ok(app.inject.includes('locale'));
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.ok(pkg.dsh.client.inject.includes('@deepseek-ai/dsh-client-locale'));
+  assert.deepEqual(app.effectLabels, ['dsh-mcp-manager: dictionaries']);
+  for (const key of [...source.matchAll(/\bt\("([\w-]+)"/g)].map((match) => match[1])) {
+    for (const locale of ['zh', 'en']) assert.ok(app.dictionaries[locale][key], locale + ': ' + key);
   }
-  assert.equal(translations.en('toolCount', { count: 2 }), 'Tools: 2');
-  assert.equal(translations.zh('toolCount', { count: 2 }), '2 个工具');
-  assert.equal(translations.en('needs-auth'), 'Authentication required');
-  const afterTable = source.slice(source.indexOf('function translator'));
-  assert.doesNotMatch(afterTable, /\p{Script=Han}/u, 'Chinese UI text must live in the table');
+  assert.doesNotMatch(source.slice(source.indexOf('function api')), /\p{Script=Han}/u);
+  assert.doesNotMatch(source, /STRINGS|translator|systemLanguage|navigator|settings\/language|mm_language/);
+  app.dispose();
+});
+
+it('renders the injected t and follows locale changes without plugin language requests', async () => {
+  const calls = [];
+  const app = mount(async (url) => { calls.push(url); return response({}); });
+  let tree = app.render();
+  assert.match(text(tree), /MCP servers/);
+  app.effects(); await settle();
+  app.setLocale('zh');
+  tree = app.render();
+  assert.match(text(tree), /MCP 服务器/);
+  assert.equal(calls.filter((url) => url.endsWith('/settings')).length, 1);
+  assert.ok(calls.every((url) => !url.includes('/settings/language')));
+  // An arbitrary standard-seat translator reaches the content and nested forms.
+  tree = app.render(undefined, { t: (key) => 'seat:' + key });
+  assert.match(text(tree), /seat:servers/);
+  nodes(tree).find((node) => node.props['aria-label'] === 'seat:addServer').props.onClick();
+  const form = content(app.render(undefined, { t: (key) => 'seat:' + key }));
+  assert.equal(form.props.t('save'), 'seat:save');
 });
 
 it('renders English list, add form, and stdio fields using the same translator', async () => {
-  const app = mount(async () => response({ language: 'en' }));
-  app.render(); app.effects(); await settle();
-  const body = content(app.render());
-  app.reset();
-  let tree = app.render(body.type, body.props);
+  const app = mount(async () => response({}));
+  let tree = app.render();
   assert.match(text(tree), /MCP servers/);
   nodes(tree).find((node) => node.props['aria-label'] === 'Add MCP server').props.onClick();
-  tree = app.render(body.type, body.props);
+  tree = app.render();
   assert.match(text(tree), /Add MCP server/);
   const form = content(tree);
   app.reset();

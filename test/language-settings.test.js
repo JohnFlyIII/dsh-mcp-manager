@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, it } from 'node:test';
@@ -59,23 +59,20 @@ async function request(handler, method, path, body) {
 }
 
 
-it('language is unset by default, validates input, and persists across apply() restarts', async () => {
-  const handler = makeCtx().routes[0].handler;
-  const get = (h = handler) => request(h, 'GET', '/mcp-manager/api/settings');
-  const post = (body) => request(handler, 'POST', '/mcp-manager/api/settings/language', body);
-  assert.equal((await get()).json.language, null);
-  for (const body of [{}, null, { language: 'fr' }, { language: 1 }, { language: 'EN' }]) {
-    assert.equal((await post(body)).code, 400);
+it('settings omits language, rejects the removed route, and preserves legacy state', async () => {
+  let handler = makeCtx().routes[0].handler;
+  const get = () => request(handler, 'GET', '/mcp-manager/api/settings');
+  assert.deepEqual((await get()).json, { onDemandToolInjection: false });
+  mkdirSync(join(scratchHome, '.dsh'), { recursive: true });
+  writeFileSync(statePath, JSON.stringify({ servers: [], language: 'zh' }));
+  handler = makeCtx().routes[0].handler;
+  assert.deepEqual((await get()).json, { onDemandToolInjection: false });
+  for (const body of [{ language: 'en' }, { language: 'zh' }, {}, null]) {
+    assert.equal((await request(handler, 'POST', '/mcp-manager/api/settings/language', body)).code, 404);
   }
-  assert.equal((await get()).json.language, null);
-  assert.equal((await post({ language: 'en' })).code, 200);
-  assert.equal((await get()).json.language, 'en');
-  assert.equal(JSON.parse(readFileSync(statePath, 'utf8')).language, 'en');
-  assert.equal((await get(makeCtx().routes[0].handler)).json.language, 'en');
+  assert.equal(JSON.parse(readFileSync(statePath, 'utf8')).language, 'zh');
   assert.equal((await request(handler, 'POST', '/mcp-manager/api/settings/on-demand', { enabled: true })).code, 200);
-  assert.equal((await get()).json.language, 'en');
-  assert.equal((await post({ language: 'zh' })).code, 200);
-  const settings = (await get(makeCtx().routes[0].handler)).json;
-  assert.equal(settings.language, 'zh');
-  assert.equal(settings.onDemandToolInjection, true);
+  assert.equal(JSON.parse(readFileSync(statePath, 'utf8')).language, 'zh');
+  handler = makeCtx().routes[0].handler;
+  assert.deepEqual((await get()).json, { onDemandToolInjection: true });
 });

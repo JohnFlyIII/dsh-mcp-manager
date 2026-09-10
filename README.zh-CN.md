@@ -16,7 +16,9 @@
 - **可选按需 broker**：模型侧固定只暴露 `mcp_search_tools`、`mcp_describe_tool`、`mcp_execute_tool`，不再每轮发送所有 `mcp__*` schema。默认关闭，必须手动开启。 `mcp_search_tools` 是零依赖词法排序器（BM25 + CJK/别名/模糊，且支持列目录兜底）。
 - **稳定刷新工具列表**：stdio 与 Streamable HTTP 收到 `notifications/tools/list_changed` 后，只更新新增、删除或 schema 变化的注册，未变化工具保持挂载。
 
-设置 → MCP 顶部的**语言**选择器提供 **中文 / English**，未保存选择时，默认跟随系统/浏览器语言：中文区域设置（`zh*`）使用中文，其他语言使用英文。优先读取 `navigator.language`，为空时使用 `navigator.languages[0]`；无法获取语言时回退到中文。手动选择始终优先。选择通过宿主 API 保存到 `~/.dsh/mcp-manager.json`，在当前 DSH 配置档内生效，刷新页面或重启 DSH 后仍保留。标签、表单、状态徽标和确认提示均支持双语；服务器返回的诊断信息保持原文。
+MCP 界面通过 `mcp` locale 命名空间跟随 DSH 在**设置 → 通用 → 语言**中的语言偏好。浏览器回退、偏好持久化和实时语言更新均由 DSH 管理；插件不再提供独立语言选择器或语言 API。标签、表单、状态徽标和确认提示均支持双语；服务器返回的诊断信息保持原文。`~/.dsh/mcp-manager.json` 中遗留的 `language` 值会被忽略并原样保留。
+
+0.11.0 需要 `@deepseek-ai/dsh-client-locale` 和槽位系统提供的 locale `t` 属性。下列兼容性运行验证早于本次集成，并未验证所有已列出 DSH 版本上的实时语言切换。部署到旧版 web profile 前，请切换 DSH 语言并检查设置 → MCP 页面。
 
 ## 前置要求
 
@@ -124,6 +126,8 @@ DSH STORE 目录额外固定完整的 40 位 commit，而不是浮动分支（0.
 | 自动化（单元 + 契约） | 已验证 | `npm test`（`node --test`）——覆盖 host 半导出的辅助函数，以及基于 stub context 的 `apply()` API 冒烟测试。测试绝不写真实的 `~/.dsh` |
 | 一次性 Profile 运行时 | 已验证 | 临时 `$DSH_HOME`：用官方 CLI 安装，启动 `web`（`GET /mcp-manager/api/ping` 返回 200）与 `headless`（agent setup 生效；在 `0.1.5-*` 上还可确认 agent 能看到注册的 `mcp__<服务器>__<工具>`），对 `dshReleases` 中每条已声明版本各跑一次，随后删除 Profile |
 | 真实 Profile、商城页面、公开产物 | 未验证 | E4/E5 验收由运维方负责，不属于本仓库的验证范围 |
+
+0.11.0 的 locale 契约由客户端/API stub 测试覆盖。一次性 Profile 的 CLI 安装成功，但 web 启动被沙箱阻止（`listen EPERM 127.0.0.1:3080`），因此尚未验证浏览器中的实时语言切换。
 
 下一个门禁：真实 Profile 的回读（解析出的版本、运行进程、设置 → MCP 页面可见），以及在分发场景下对已打 tag 产物的免登录回读。在这些证据补齐之前，兼容性声明只代表一次性 Profile 的验证结果，**不代表**你的实际安装已被验证；DSH STORE 的上架状态同理。
 
