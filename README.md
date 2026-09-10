@@ -16,6 +16,8 @@ The built-in `@deepseek-ai/dsh-mcp-client` only accepts a static `headers` confi
 - **Opt-in on-demand broker**: keep the model-facing MCP surface fixed at `mcp_search_tools`, `mcp_describe_tool`, and `mcp_execute_tool` instead of sending every `mcp__*` schema on every Native-mode request. It is disabled by default. `mcp_search_tools` is a zero-dependency lexical ranker (BM25 + CJK/alias/fuzzy, plus a catalog-listing fallback).
 - **Stable tool refresh**: `notifications/tools/list_changed` refreshes only added, removed, or schema-changed registrations for both stdio and Streamable HTTP servers.
 
+The **Language** selector at the top of Settings → MCP offers **中文 / English**. Chinese remains the default. Your choice is saved through the host API in `~/.dsh/mcp-manager.json`, applies to this DSH profile, and survives page reloads and DSH restarts. Labels, forms, status badges, and confirmations are translated; server-supplied diagnostics remain in their original language.
+
 ## Requirements
 
 - DeepSeek Harness, web profile for the Settings → MCP page (`npx @deepseek-ai/dsh web`). On a profile without a GUI webserver (headless/tui) the plugin still registers MCP tools and connects servers — only the settings page is missing.
