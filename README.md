@@ -20,7 +20,7 @@ The built-in `@deepseek-ai/dsh-mcp-client` only accepts a static `headers` confi
 
 - DeepSeek Harness, web profile for the Settings → MCP page (`npx @deepseek-ai/dsh web`). On a profile without a GUI webserver (headless/tui) the plugin still registers MCP tools and connects servers — only the settings page is missing.
 - Node.js `^22.19` or `>=24`; pnpm on your `PATH`
-- Verified DSH releases are declared one by one in `package.json` → `dsh.compatibility.dshReleases` (`0.1.2-rc.1`, `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1` are `compatible`; supported range `>=0.1.2-rc.1 <0.2.0`). Releases that are not listed are untested, not declared broken. These declarations are backed by disposable-profile runs: install into a scratch `$DSH_HOME`, boot the `web` profile (`GET /mcp-manager/api/ping` → 200), boot the `headless` profile and confirm a registered `mcp__<server>__<tool>` is visible to the agent, then delete the profile — never against a real `~/.dsh`.
+- Verified DSH releases are declared one by one in `package.json` → `dsh.compatibility.dshReleases` (`0.1.2-rc.1`, `0.1.5-alpha.1`, `0.1.5-alpha.2`, `0.1.5-rc.1` are `compatible`; supported range `>=0.1.2-rc.1 <0.2.0`). Releases that are not listed are untested, not declared broken. These declarations are backed by disposable-profile runs: install into a scratch `$DSH_HOME`, boot the `web` profile (`GET /mcp-manager/api/ping` → 200), boot the `headless` profile and confirm the agent setup applies (on `0.1.5-*` a registered `mcp__<server>__<tool>` is also visible to the agent), then delete the profile — never against a real `~/.dsh`.
 - Windows 10/11: stdio commands are launched via `cmd.exe` so `.cmd` shims (`npx`, `uvx`) resolve correctly
 
 ## Install
@@ -104,6 +104,26 @@ Global servers (added in **Settings → MCP**) are visible in every workspace. U
 | Workspace isolation | `agents.create`/`resume` are decorated to compose a per-agent setup that registers `<workspace>/.dsh/dshmm/mcp.json` tools into the agent scope and applies `tools.restrict({ deny })` for `exclude` |
 | Harness compatibility | The composed agent setup takes the Agent from the setup callback's explicit second argument (DSH 0.1.5-alpha.1 and later) and only falls back to the legacy `agent` context accessor. Newer harness builds removed that accessor, so reading `ctx.agent` there throws `cannot get property "agent" without inject` and fails every `agents.resume`/`create`. The GUI webserver is injected lazily, so a profile without one keeps its MCP tools instead of leaving a pending entry |
 | Hot path | Same-origin JSON API under `/mcp-manager/api/*` between the settings page and the host half |
+
+## Verification and next gate
+
+Releases are immutable and tagged, so consumers can pin one:
+
+```sh
+npx -p @deepseek-ai/dsh dsh plugin --profile web add github:hyqhyq3/dsh-mcp-manager#v0.7.4
+```
+
+The DSH STORE catalog additionally pins a full 40-character commit instead of a floating branch (release 0.7.3 = `9418e460b105aeb3c0460e6392809bc9fe963836`; the store re-pins the newest release after each push).
+
+What is verified today, and what is not:
+
+| Level | State | How |
+|---|---|---|
+| Automated (unit + contract) | verified | `npm test` (`node --test`) — host-half exported helpers plus a stubbed-context `apply()` API smoke test. Tests never write to a real `~/.dsh` |
+| Disposable-profile runtime | verified | Scratch `$DSH_HOME`: install via the official CLI, boot `web` (`GET /mcp-manager/api/ping` → 200) and `headless` (agent setup applies; on `0.1.5-*` a registered `mcp__<server>__<tool>` is visible to the agent), once per declared `dshReleases` entry, then delete the profile |
+| Real profile, store page, public artifacts | not verified here | E4/E5 acceptance is owned by the operator, not by this repository |
+
+Next gate: a real-profile readback (resolved version, running process, visible Settings → MCP page) plus, for distribution, an unauthenticated readback of the tagged artifacts. Until those are recorded, read the compatibility declarations as disposable-profile verification only — not as proof of a live installation. The same applies to listing status on DSH STORE.
 
 ## Limitations
 

@@ -26,10 +26,10 @@ Plugin **source** is two files — keep it that way unless a refactor is explici
 
 ## Commands
 
-No build/lint scripts — package.json has none. It's plain ESM with zero dependencies (Node built-ins only; Node `^22.19 || >=24`). Unit tests run with the Node test runner and no package script:
+No build/lint scripts. It's plain ESM with zero dependencies (Node built-ins only; Node `^22.19 || >=24`). `package.json` declares exactly one script, `test`:
 
 ```sh
-node --test          # default discovery picks up test/*.test.js
+npm test             # = node --test; default discovery picks up test/*.test.js
 node --test test/mcp-image-projection.test.js   # single file
 ```
 
@@ -39,14 +39,22 @@ Verify behavior changes by installing into a live DSH web profile:
 npx -p @deepseek-ai/dsh dsh plugin --profile web add <path-or-repo>
 ```
 
-then restart `dsh --profile web` and reload the page. The API liveness probe is `GET /mcp-manager/api/ping`.
+then restart `dsh --profile web` and reload the page. The API liveness probe is `GET /mcp-manager/api/ping`. Always set both `HOME` and `DSH_HOME` to a scratch directory for `dsh`/`dsh plugin` runs — never let a test touch the real `~/.dsh`.
+
+Optional static audit — [build-dsh-plugin](https://github.com/AI-Scarlett/build-dsh-plugin) is a third-party Agent Skill used as a checklist, not a dependency:
+
+```sh
+node <build-dsh-plugin>/build-dsh-plugin/scripts/audit-plugin.mjs "$PWD"
+```
+
+Two of its hard blockers are reviewed false positives here and must not be "fixed" by obfuscating the code: `lib/index.js:123` and `:1085` quote the text `shell: true` inside doc comments (the real `spawn` call uses `shell: isWin`, guarded by `quoteWindowsToken`), and `lib/index.js:402` logs a server *name* on the legacy-plaintext path and never a credential value. Re-read the flagged lines; treat the *unmet checks* (test script, pinned source, verification/next-gate docs) as real. Runtime points require `--evidence <file>`, a self-reported record — never claim them without a real disposable-profile run.
 
 ## Conventions
 
 - No TypeScript, no bundler, no framework — plain modern JavaScript in both files.
 - Host half: `ctx.logger` (`info`/`warn`/`error`) with `mcp-manager:` prefix; never `console.log`.
 - Client half: `react` obtained via the factory's `require("react")`; styles in the injected `<style>` string using `--dsw-alias-*` CSS variables with hardcoded fallbacks.
-- Bump `version` in package.json on user-visible changes (recent history: 0.1.0 OAuth, 0.2.0 stdio, 0.3.0 enable/disable, 0.4.0 Windows stdio + edit + Codex-style HTTP config, 0.5.0 workspace isolation, 0.6.0 on-demand broker, 0.7.0 MCP image-block projection, 0.7.1 legacy-state migration + Windows command quoting).
+- Bump `version` in package.json on user-visible changes (recent history: 0.1.0 OAuth, 0.2.0 stdio, 0.3.0 enable/disable, 0.4.0 Windows stdio + edit + Codex-style HTTP config, 0.5.0 workspace isolation, 0.6.0 on-demand broker, 0.7.0 MCP image-block projection, 0.7.1 legacy-state migration + Windows command quoting, 0.7.2 agent-setup contract + lazy webserver injection, 0.7.3 DSH/Node compatibility matrix, 0.7.4 declared test script + verification/next-gate docs).
 
 ## Release
 
