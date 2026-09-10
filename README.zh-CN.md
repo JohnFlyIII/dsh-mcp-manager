@@ -20,6 +20,7 @@
 
 - DeepSeek Harness；设置 → MCP 页面需要 web profile（`npx @deepseek-ai/dsh web`）。在没有 GUI webserver 的 profile（headless/tui）上，插件仍会注册 MCP 工具并连接服务器，只是没有设置页。
 - Node.js `^22.19` 或 `>=24`；`PATH` 里有 pnpm
+- 已验证的 DSH 版本在 `package.json` → `dsh.compatibility.dshReleases` 中逐条声明（`0.1.2-rc.1`、`0.1.5-alpha.1`、`0.1.5-alpha.2`、`0.1.5-rc.1` 为 `compatible`；支持范围 `>=0.1.2-rc.1 <0.2.0`）。未列出的版本是未经测试，不代表不兼容。上述声明来自一次性 Profile 实测：装进临时 `$DSH_HOME`，启动 `web` profile（`GET /mcp-manager/api/ping` 返回 200）、启动 `headless` profile 并确认 agent 能看到注册的 `mcp__<服务器>__<工具>`，随后删除该 Profile——全程不碰真实的 `~/.dsh`。
 - Windows 10/11：stdio 命令经 `cmd.exe` 启动，以便 `.cmd` shim（`npx`、`uvx`）正确解析
 
 ## 安装
@@ -101,7 +102,7 @@ mcp__odin__execute_tool     mcp__odin__list_tool_scopes
 | 按需 broker | Profile 开关注册三个 broker 工具，在提示词组装后过滤原始 `mcp__*` schema，并用执行守卫确保只有 `mcp_execute_tool` 能调用隐藏工具 |
 | 工具列表变化 | stdio 通知与 Streamable HTTP SSE 通道触发重新读取 `tools/list`；未变化的注册保持挂载 |
 | 工作区隔离 | 装饰 `agents.create`/`resume`，组合出 per-agent setup：把 `<workspace>/.dsh/dshmm/mcp.json` 的工具注册进 agent 作用域，并按 `exclude` 应用 `tools.restrict({ deny })` |
-| 新版本兼容 | 组合出的 agent setup 优先取 setup 回调的第二个参数（DSH 0.1.5-rc.* 起），仅在缺失时回退到旧的 `agent` 上下文访问器。新版 harness 移除了该访问器，直接读 `ctx.agent` 会抛 `cannot get property "agent" without inject`，导致每次 `agents.resume`/`create` 失败。GUI webserver 改为惰性注入，没有它的 profile 也能继续注册 MCP 工具，而不会留下未激活的条目 |
+| 新版本兼容 | 组合出的 agent setup 优先取 setup 回调的第二个参数（DSH 0.1.5-alpha.1 起），仅在缺失时回退到旧的 `agent` 上下文访问器。新版 harness 移除了该访问器，直接读 `ctx.agent` 会抛 `cannot get property "agent" without inject`，导致每次 `agents.resume`/`create` 失败。GUI webserver 改为惰性注入，没有它的 profile 也能继续注册 MCP 工具，而不会留下未激活的条目 |
 | 交互通道 | 设置页与 host 半之间走同源 JSON API（`/mcp-manager/api/*`） |
 
 ## 已知限制
