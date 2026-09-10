@@ -13,7 +13,7 @@ The built-in `@deepseek-ai/dsh-mcp-client` only accepts a static `headers` confi
 - **Edit-in-place**: rename a server, switch stdio ↔ HTTP, or change auth/headers without deleting and re-adding it.
 - **Tool registration** with the same `mcp__<server>__<rawName>` naming convention as the built-in client, including strict-schema sanitization for the DSH tool registry and `isConcurrencySafe` marking.
 - **Workspace isolation**: declare per-project servers in `<workspace>/.dsh/dshmm/mcp.json` — their tools register only into that workspace's sessions, and you can mask specific global servers per workspace.
-- **Opt-in on-demand broker**: keep the model-facing MCP surface fixed at `mcp_search_tools`, `mcp_describe_tool`, and `mcp_execute_tool` instead of sending every `mcp__*` schema on every Native-mode request. It is disabled by default.
+- **Opt-in on-demand broker**: keep the model-facing MCP surface fixed at `mcp_search_tools`, `mcp_describe_tool`, and `mcp_execute_tool` instead of sending every `mcp__*` schema on every Native-mode request. It is disabled by default. `mcp_search_tools` is a zero-dependency lexical ranker (BM25 + CJK/alias/fuzzy, plus a catalog-listing fallback).
 - **Stable tool refresh**: `notifications/tools/list_changed` refreshes only added, removed, or schema-changed registrations for both stdio and Streamable HTTP servers.
 
 ## Requirements
@@ -59,7 +59,7 @@ Tool results are projected back as native DSH content blocks; MCP `isError` resu
 
 With on-demand mode on, a Native-mode agent sees only these three MCP broker tools:
 
-- `mcp_search_tools({ query, server?, limit? })` returns up to 10 lightweight matches by default (hard-capped at 20). It scores each query term against server name `+2`, tool name `+3`, and description `+1`.
+- `mcp_search_tools({ query?, server?, limit? })` is a pure-lexical ranked search (no embedding model, no network): NFKC normalization, camelCase/CJK tokenization with a small English stemmer, a built-in bilingual alias table (e.g. `查日志` → `log`/`logs`), BM25 over the tool/server/description fields, and a bounded edit-distance fallback for typos. Omit `query` to list the catalog (optionally `server`-filtered). It returns at most `limit` matches (default 10, clamped to 1-50) plus `total`, the number of results before truncation.
 - `mcp_describe_tool({ name })` returns the exact registered description and input schema for one tool visible in that session.
 - `mcp_execute_tool({ name, arguments })` executes any currently visible MCP tool through the normal DSH tool pipeline. Calling `describe` first is recommended but not required.
 

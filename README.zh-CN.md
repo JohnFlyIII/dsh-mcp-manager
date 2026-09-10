@@ -13,7 +13,7 @@
 - **就地编辑**：重命名、stdio ↔ HTTP 切换、改认证方式/标头，无需删除重建。
 - **工具注册**：与内置客户端相同的 `mcp__<server>__<rawName>` 命名约定，含 DSH 工具注册表的严格 schema 清洗，并标记 `isConcurrencySafe`。
 - **工作区隔离**：在 `<workspace>/.dsh/dshmm/mcp.json` 声明项目专属服务器——其工具只注册进该工作区的会话，还可按工作区屏蔽指定的全局服务器。
-- **可选按需 broker**：模型侧固定只暴露 `mcp_search_tools`、`mcp_describe_tool`、`mcp_execute_tool`，不再每轮发送所有 `mcp__*` schema。默认关闭，必须手动开启。
+- **可选按需 broker**：模型侧固定只暴露 `mcp_search_tools`、`mcp_describe_tool`、`mcp_execute_tool`，不再每轮发送所有 `mcp__*` schema。默认关闭，必须手动开启。 `mcp_search_tools` 是零依赖词法排序器（BM25 + CJK/别名/模糊，且支持列目录兜底）。
 - **稳定刷新工具列表**：stdio 与 Streamable HTTP 收到 `notifications/tools/list_changed` 后，只更新新增、删除或 schema 变化的注册，未变化工具保持挂载。
 
 ## 前置要求
@@ -59,7 +59,7 @@ mcp__odin__execute_tool     mcp__odin__list_tool_scopes
 
 按需模式开启后，Native agent 只看到三个 MCP broker 工具：
 
-- `mcp_search_tools({ query, server?, limit? })`：默认返回最多 10 个轻量结果，硬上限 20；每个查询词按服务器名 `+2`、工具名 `+3`、描述 `+1` 计分。
+- `mcp_search_tools({ query?, server?, limit? })`：纯词法排序检索（不引入 embedding、不发网络请求）——NFKC 归一、camelCase/CJK 分词 + 轻量英文词干、内置中英别名词典（如 `查日志` → `log`/`logs`）、对工具名/服务器名/描述做 BM25，并对拼写错误做有界编辑距离兜底。省略 `query` 即列出目录（可按 `server` 过滤）。最多返回 `limit` 条（默认 10，夹取 1-50）以及 `total`（截断前结果数）。
 - `mcp_describe_tool({ name })`：返回当前会话可见工具的完整描述和精确输入 schema。
 - `mcp_execute_tool({ name, arguments })`：通过 DSH 标准工具流水线执行当前可见 MCP 工具；建议先 describe，但不强制。
 
