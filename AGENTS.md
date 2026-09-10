@@ -7,7 +7,7 @@ DSH plugin: MCP server manager for DeepSeek Harness (web profile). Settings → 
 Plugin **source** is two files — keep it that way unless a refactor is explicitly requested (tests live under `test/`):
 
 - `lib/index.js` — **host half** (Node.js): HTTP API on the DSH GUI webserver under `/mcp-manager/api/*`, OAuth flow (redirect receiver at `/mcp-manager/callback/:id`), both MCP transports, tool registration into `ctx.tools`, state persistence.
-- `lib/client.js` — **client half** (browser): a `window.__ModuleLoader__.load(...)` factory using `react.createElement` (no JSX, no bundler). Registers the Settings → MCP tab via the `settings.section` slot. UI strings are Simplified Chinese.
+- `lib/client.js` — **client half** (browser): a `window.__ModuleLoader__.load(...)` factory using `react.createElement` (no JSX, no bundler). Registers the Settings → MCP tab via the `settings.section` slot. **UI is bilingual** (Simplified Chinese default, English opt-in) — every user-visible string is resolved through the `STRINGS` table, never hardcoded.
 - `cordis.patch.yml` — bundle patch that activates the plugin row (`dsh.bundle.patch` in package.json).
 - `test/*.test.js` — `node --test` unit tests over the host half's exported helpers plus a stubbed-context `apply()` API smoke test (not shipped: `files` lists only `lib/*`).
 - `README.md` / `README.zh-CN.md` — keep both in sync on behavior changes.
@@ -23,6 +23,7 @@ Plugin **source** is two files — keep it that way unless a refactor is explici
 - Loaded state is migrated once in `apply()` via `migrateLoadedState`: missing or duplicate `server.id` values are backfilled (live status and `/servers/:id/*` are id-keyed, so a missing id 404s every id-addressed API) and legacy `[{ name, value }]` env/header arrays are normalized to maps. Persist immediately when it reports a change.
 - HTTP transport: streamable HTTP (JSON-RPC POST, `Mcp-Session-Id` header, SSE-or-JSON response fallback in `parseRpc`). A 401 triggers one `refresh_token` retry, then reconnect.
 - Disable/enable is global per profile: disable unregisters tools + drops the connection but persists config and tokens; enable reconnects without re-auth.
+- UI is bilingual: `STRINGS` holds a `zh` and an `en` table with the **same key set** — add new strings to both (the translator falls back to `zh`, then to the raw key). Language is never chosen in the palette: the client reads it from `GET /mcp-manager/api/settings`, writes it via `POST /mcp-manager/api/settings/language` (`zh`|`en`, 400 otherwise), and it persists as `state.language` in `~/.dsh/mcp-manager.json`. Server-supplied diagnostics (MCP error text, tool descriptions) stay in their original language.
 
 ## Commands
 
@@ -54,7 +55,7 @@ Two of its hard blockers are reviewed false positives here and must not be "fixe
 - No TypeScript, no bundler, no framework — plain modern JavaScript in both files.
 - Host half: `ctx.logger` (`info`/`warn`/`error`) with `mcp-manager:` prefix; never `console.log`.
 - Client half: `react` obtained via the factory's `require("react")`; styles in the injected `<style>` string using `--dsw-alias-*` CSS variables with hardcoded fallbacks.
-- Bump `version` in package.json on user-visible changes (recent history: 0.1.0 OAuth, 0.2.0 stdio, 0.3.0 enable/disable, 0.4.0 Windows stdio + edit + Codex-style HTTP config, 0.5.0 workspace isolation, 0.6.0 on-demand broker, 0.7.0 MCP image-block projection, 0.7.1 legacy-state migration + Windows command quoting, 0.7.2 agent-setup contract + lazy webserver injection, 0.7.3 DSH/Node compatibility matrix, 0.7.4 declared test script + verification/next-gate docs).
+- Bump `version` in package.json on user-visible changes (recent history: 0.1.0 OAuth, 0.2.0 stdio, 0.3.0 enable/disable, 0.4.0 Windows stdio + edit + Codex-style HTTP config, 0.5.0 workspace isolation, 0.6.0 on-demand broker, 0.7.0 MCP image-block projection, 0.7.1 legacy-state migration + Windows command quoting, 0.7.2 agent-setup contract + lazy webserver injection, 0.7.3 DSH/Node compatibility matrix, 0.7.4 declared test script + verification/next-gate docs, 0.8.0 zero-dependency lexical tool search + browse fallback, 0.9.0 English UI — bilingual `STRINGS` table + language selector).
 
 ## Release
 
