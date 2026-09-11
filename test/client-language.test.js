@@ -122,3 +122,30 @@ it('renders English list, add form, and stdio fields using the same translator',
   assert.match(text(tree), /Command \(executable\)/);
   assert.match(text(tree), /Environment variables/);
 });
+
+it('offers a no-auth HTTP mode and hides the token field when selected', async () => {
+  const app = mount(async () => response({}));
+  let tree = app.render();
+  nodes(tree).find((node) => node.props['aria-label'] === 'Add MCP server').props.onClick();
+  tree = app.render();
+  const form = content(tree);
+  app.reset();
+  tree = app.render(form.type, form.props);
+
+  const authSelect = nodes(tree).find((node) => node.type === 'select' && node.props.value === 'oauth');
+  assert.ok(authSelect, 'the authentication-method select renders');
+  assert.deepEqual(authSelect.children.map((option) => option.props.value), ['oauth', 'static', 'none']);
+  assert.match(text(tree), /No auth \(server needs no credentials\)/);
+  assert.doesNotMatch(text(tree), /Bearer token environment variable/);
+
+  // Static still asks for the env var name...
+  authSelect.props.onChange({ target: { value: 'static' } });
+  tree = app.render(form.type, form.props);
+  assert.match(text(tree), /Bearer token environment variable/);
+
+  // ...while no-auth hides the credential field entirely.
+  nodes(tree).find((node) => node.type === 'select' && node.props.value === 'static').props.onChange({ target: { value: 'none' } });
+  tree = app.render(form.type, form.props);
+  assert.match(text(tree), /No auth \(server needs no credentials\)/);
+  assert.doesNotMatch(text(tree), /Bearer token environment variable/);
+});

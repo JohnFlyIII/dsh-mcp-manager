@@ -8,6 +8,7 @@
 
 - **OAuth（授权码 + PKCE）**：RFC 7591 动态客户端注册、`refresh_token` 自动轮换、重启后自动重连——浏览器登录一次，之后一直可用。
 - **静态 Bearer Token** 模式：适配没有 OAuth 的服务器——以环境变量**名称**（Codex 风格 `tokenEnv`）引用，token 明文不落盘。
+- **无鉴权**模式：适配完全不需要凭据的服务器（例如本机 `http://127.0.0.1:9316/mcp`）——插件不发送 `Authorization` 头，保存后直接连接。
 - **自定义 HTTP 标头**：`headers`（直接值）+ `headerEnv`（值取自环境变量），对齐 Codex 的 `http_headers` / `env_http_headers`。
 - **stdio 本地进程**：直接跑 `npx` / `uvx` / `python` 等命令，插件用 JSON-RPC over stdin/stdout 与之通信（自动拉起子进程、重连、退出时回收），无需任何远程服务器或认证。Windows 的 `.cmd` shim（如 `npx.cmd`）通过 `cmd.exe` 解析。
 - **就地编辑**：重命名、stdio ↔ HTTP 切换、改认证方式/标头，无需删除重建。
@@ -42,11 +43,12 @@ npx -p @deepseek-ai/dsh dsh plugin --profile web add github:hyqhyq3/dsh-mcp-mana
 1. 打开 DSH Web UI 的 **设置 → MCP**。
 2. **＋ 添加 MCP 服务器**（之后可用 **编辑** 修改）：
    - **作用域 Scope**：`user` = 全局服务器（所有工作区可用）；`workspace` = 绑定到某个工作区（配置写入该工作区的 `.dsh/dshmm/mcp.json`），从第二个下拉框选择工作区。
-   - **HTTP**：名称（决定 `mcp__<name>__*` 前缀）、URL、认证方式（OAuth 或静态 token）、可选标头（`headers` 直接值、`headerEnv` 值取自环境变量）。
+   - **HTTP**：名称（决定 `mcp__<name>__*` 前缀）、URL、认证方式（OAuth、静态 token 或无鉴权）、可选标头（`headers` 直接值、`headerEnv` 值取自环境变量）。
    - **stdio**：名称、命令（如 `npx`）、参数（逐行填写）、环境变量（键/值逐行）、可选工作目录。
 3. OAuth 服务器：点 **去认证** → 浏览器打开登录页 → 同意授权后跳回，工具立即注册。
 4. 静态 token 服务器：填写**存放 token 的环境变量名**（如 `MCP_BEARER_TOKEN`）——token 本身不写入磁盘；stdio 服务器保存后立即拉起本地进程并连接。
-5. 可选：打开页面顶部的**按需 MCP 工具调用**。该开关对整个 profile 生效，重启后保持，并在现有会话的下一次请求开始生效。
+5. 无鉴权服务器：选择 **无鉴权（服务器无需认证）**——插件不发送 `Authorization` 头，保存后直接连接；适用于不做认证的端点（例如本机 `http://127.0.0.1:9316/mcp`）。
+6. 可选：打开页面顶部的**按需 MCP 工具调用**。该开关对整个 profile 生效，重启后保持，并在现有会话的下一次请求开始生效。
 
 状态徽章：`已连接 (N 个工具)` / `待认证` / `认证中` / `错误` / `已禁用`。按钮：去认证、编辑、启用/禁用（开关）、删除。**禁用**会注销该服务器的全部工具并断开连接（配置与 OAuth token 保留）；**启用**时自动重连，无需重新认证。被禁用的服务器重启后保持休眠。该开关为全局生效：影响此 profile 下的所有会话。状态持久化在 `~/.dsh/mcp-manager.json`（服务器配置 + OAuth 客户端注册信息 + token；静态 token 仅以环境变量名引用，不落盘）。
 
@@ -77,7 +79,8 @@ mcp__odin__execute_tool     mcp__odin__list_tool_scopes
 {
   "mcpServers": {
     "filesystem": { "type": "stdio", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "."] },
-    "unity-mcp": { "type": "http", "url": "http://localhost:8090/", "authMode": "static", "tokenEnv": "UNITY_MCP_TOKEN" }
+    "unity-mcp": { "type": "http", "url": "http://localhost:8090/", "authMode": "static", "tokenEnv": "UNITY_MCP_TOKEN" },
+    "local-mcp": { "type": "http", "url": "http://127.0.0.1:9316/mcp", "authMode": "none" }
   },
   "exclude": ["github"]
 }
@@ -89,7 +92,7 @@ mcp__odin__execute_tool     mcp__odin__list_tool_scopes
 - `exclude` 列出要在此工作区隐藏的全局服务器（通过工具注册表的按 agent 限制屏蔽其工具）。在工作区视图里点每条全局服务器上的**隐藏**复选框即可切换。
 - `serverName` 在「全局 + 所有工作区来源」之间必须唯一；重复的名称会被标记为冲突并跳过（UI 里可见）。
 - 配置在每个新会话时重读，并通过文件监听热更新。
-- 工作区服务器支持 **stdio**、**HTTP 静态 token**（`tokenEnv`）与 **HTTP OAuth**——与全局服务器相同的 PKCE + 动态客户端注册流程。工作区 OAuth token 持久化在 `~/.dsh/mcp-manager.json`（绝不写进声明式的 `mcp.json`）；每条工作区 OAuth 服务器行都有「去认证」按钮。
+- 工作区服务器支持 **stdio**、**HTTP 静态 token**（`tokenEnv`）、**HTTP OAuth**（与全局服务器相同的 PKCE + 动态客户端注册流程）与 **HTTP 无鉴权**（`authMode: "none"`，不发 `Authorization` 头）。工作区 OAuth token 持久化在 `~/.dsh/mcp-manager.json`（绝不写进声明式的 `mcp.json`）；每条工作区 OAuth 服务器行都有「去认证」按钮。
 
 ## 工作原理
 
@@ -97,7 +100,7 @@ mcp__odin__execute_tool     mcp__odin__list_tool_scopes
 |---|---|
 | 设置页 | client 半注册 `settings.section` 槽位（MCP 页签） |
 | OAuth 流程 | host 半做动态客户端注册 + PKCE；重定向落在 DSH GUI webserver 自身挂载的路由上 |
-| Token 存储 | `~/.dsh/mcp-manager.json`；OAuth token 401 时自动刷新。静态 token 从 `tokenEnv` 指定的环境变量读取，不落盘 |
+| Token 存储 | `~/.dsh/mcp-manager.json`；OAuth token 401 时自动刷新。静态 token 从 `tokenEnv` 指定的环境变量读取，不落盘。无鉴权服务器不存凭据、也不发送 `Authorization` 头 |
 | 旧状态迁移 | 加载时给缺少 `id` 的服务器补一个并落盘，同时把 `[{ name, value }]` 形式的 env/header 列表归一化为映射——否则按 id 的 API 会 404、数组形式的 env 会被静默丢弃 |
 | MCP 传输（HTTP） | Streamable HTTP（POST JSON-RPC、`Mcp-Session-Id`、SSE/JSON 双格式响应）；每次请求合并自定义 `headers`/`headerEnv` |
 | MCP 传输（stdio） | `child_process.spawn` 拉起本地命令，JSON-RPC over stdin/stdout（换行分隔），重连时先回收旧进程。Windows 下经 `cmd.exe` 启动以解析 `.cmd` shim |
@@ -114,10 +117,10 @@ mcp__odin__execute_tool     mcp__odin__list_tool_scopes
 发行版不可变且带 tag，消费者可以固定到某个版本：
 
 ```sh
-npx -p @deepseek-ai/dsh dsh plugin --profile web add github:hyqhyq3/dsh-mcp-manager#v0.7.4
+npx -p @deepseek-ai/dsh dsh plugin --profile web add github:hyqhyq3/dsh-mcp-manager#v0.12.0
 ```
 
-DSH STORE 目录额外固定完整的 40 位 commit，而不是浮动分支（0.7.3 发行 = `9418e460b105aeb3c0460e6392809bc9fe963836`；每次推送后由商城重新固定最新发行版）。
+DSH STORE 目录额外固定完整的 40 位 commit，而不是浮动分支（0.11.0 发行 = `1d1bb9c3851db3aefb7dd6c54a9a9dda4e4c8781`；每次推送后由商城重新固定最新发行版）。
 
 目前已验证与尚未验证的边界：
 
@@ -128,6 +131,8 @@ DSH STORE 目录额外固定完整的 40 位 commit，而不是浮动分支（0.
 | 真实 Profile、商城页面、公开产物 | 未验证 | E4/E5 验收由运维方负责，不属于本仓库的验证范围 |
 
 0.11.0 的 locale 契约由客户端/API stub 测试覆盖。一次性 Profile 的 CLI 安装成功，但 web 启动被沙箱阻止（`listen EPERM 127.0.0.1:3080`），因此尚未验证浏览器中的实时语言切换。
+
+0.12.0 的无鉴权模式由基于 stub context 的 `apply()` API 测试（本地无鉴权 stub 会记录每次请求的 `Authorization` 头）与 client-locale 测试覆盖；尚未在真实 Profile 中实测。
 
 下一个门禁：真实 Profile 的回读（解析出的版本、运行进程、设置 → MCP 页面可见），以及在分发场景下对已打 tag 产物的免登录回读。在这些证据补齐之前，兼容性声明只代表一次性 Profile 的验证结果，**不代表**你的实际安装已被验证；DSH STORE 的上架状态同理。
 

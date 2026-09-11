@@ -1,6 +1,6 @@
 # AGENTS.md
 
-DSH plugin: MCP server manager for DeepSeek Harness (web profile). Settings → MCP page for HTTP (OAuth PKCE + RFC 7591 dynamic client registration, or static Bearer token) and local stdio MCP servers, whose tools are registered as `mcp__<name>__<rawName>` native tools.
+DSH plugin: MCP server manager for DeepSeek Harness (web profile). Settings → MCP page for HTTP (OAuth PKCE + RFC 7591 dynamic client registration, static Bearer token, or no auth) and local stdio MCP servers, whose tools are registered as `mcp__<name>__<rawName>` native tools.
 
 ## Layout
 
@@ -22,6 +22,7 @@ Plugin **source** is two files — keep it that way unless a refactor is explici
 - stdio transport: `child_process.spawn`, newline-delimited JSON-RPC over stdin/stdout. Reconnect must reap the old child first; `ctx.effect` teardown kills all children on unload. `args` are quote-aware tokenized with **no shell expansion**. On Windows `shell: true` makes Node join command + args with bare spaces and add no quoting, so every token must pass through `quoteWindowsToken` (idempotent for already-quoted values) or `cmd.exe` truncates paths containing spaces.
 - Loaded state is migrated once in `apply()` via `migrateLoadedState`: missing or duplicate `server.id` values are backfilled (live status and `/servers/:id/*` are id-keyed, so a missing id 404s every id-addressed API) and legacy `[{ name, value }]` env/header arrays are normalized to maps. Persist immediately when it reports a change.
 - HTTP transport: streamable HTTP (JSON-RPC POST, `Mcp-Session-Id` header, SSE-or-JSON response fallback in `parseRpc`). A 401 triggers one `refresh_token` retry, then reconnect.
+- HTTP auth modes are `oauth` | `static` | `none`, normalized in exactly one place (`normalizeAuthMode`). `none` is exempt from the credential gate (`hasToken` → true) and `accessToken` must return `''` for it so a stale attached OAuth token is never sent; switching to `none` in the editor also drops `server.oauth`.
 - Disable/enable is global per profile: disable unregisters tools + drops the connection but persists config and tokens; enable reconnects without re-auth.
 - UI is bilingual: the `mcp` locale namespace holds `zh` and `en` dictionaries with the **same key set** — add new strings to both. Register them with `ctx.effect(() => ctx.locale.register("mcp", { zh, en }), "dsh-mcp-manager: dictionaries")`. The client injects `locale` and declares `@deepseek-ai/dsh-client-locale` in `dsh.client.inject`. Register `settings.section` with `locale: "mcp"`: its component receives the standard `t` prop and passes it to children. Use a bound `t` for the slot label callback. DSH owns language selection (Settings → General → Language), browser fallback, persistence, and live updates. Do not add a plugin language selector, language state, or language API. `GET /settings` exposes only `onDemandToolInjection`; legacy `language` values in the plugin state file remain untouched and unused. Server-supplied diagnostics (MCP error text, tool descriptions) stay in their original language.
 
@@ -48,14 +49,14 @@ Optional static audit — [build-dsh-plugin](https://github.com/AI-Scarlett/buil
 node <build-dsh-plugin>/build-dsh-plugin/scripts/audit-plugin.mjs "$PWD"
 ```
 
-Two of its hard blockers are reviewed false positives here and must not be "fixed" by obfuscating the code: `lib/index.js:123` and `:1085` quote the text `shell: true` inside doc comments (the real `spawn` call uses `shell: isWin`, guarded by `quoteWindowsToken`), and `lib/index.js:402` logs a server *name* on the legacy-plaintext path and never a credential value. Re-read the flagged lines; treat the *unmet checks* (test script, pinned source, verification/next-gate docs) as real. Runtime points require `--evidence <file>`, a self-reported record — never claim them without a real disposable-profile run.
+Two of its hard blockers are reviewed false positives here and must not be "fixed" by obfuscating the code: `lib/index.js:123` and `:1418` quote the text `shell: true` inside doc comments (the real `spawn` call uses `shell: isWin`, guarded by `quoteWindowsToken`), and `lib/index.js:747` logs a server *name* on the legacy-plaintext path and never a credential value. (These anchors drift when code is inserted above them — re-grep before trusting them.) Re-read the flagged lines; treat the *unmet checks* (test script, pinned source, verification/next-gate docs) as real. Runtime points require `--evidence <file>`, a self-reported record — never claim them without a real disposable-profile run.
 
 ## Conventions
 
 - No TypeScript, no bundler, no framework — plain modern JavaScript in both files.
 - Host half: `ctx.logger` (`info`/`warn`/`error`) with `mcp-manager:` prefix; never `console.log`.
 - Client half: `react` obtained via the factory's `require("react")`; styles in the injected `<style>` string using `--dsw-alias-*` CSS variables with hardcoded fallbacks.
-- Bump `version` in package.json on user-visible changes (recent history: 0.1.0 OAuth, 0.2.0 stdio, 0.3.0 enable/disable, 0.4.0 Windows stdio + edit + Codex-style HTTP config, 0.5.0 workspace isolation, 0.6.0 on-demand broker, 0.7.0 MCP image-block projection, 0.7.1 legacy-state migration + Windows command quoting, 0.7.2 agent-setup contract + lazy webserver injection, 0.7.3 DSH/Node compatibility matrix, 0.7.4 declared test script + verification/next-gate docs, 0.8.0 zero-dependency lexical tool search + browse fallback, 0.9.0 English UI, 0.10.0 browser language fallback, 0.11.0 DSH locale integration — bilingual `mcp` namespace + injected `t`).
+- Bump `version` in package.json on user-visible changes (recent history: 0.1.0 OAuth, 0.2.0 stdio, 0.3.0 enable/disable, 0.4.0 Windows stdio + edit + Codex-style HTTP config, 0.5.0 workspace isolation, 0.6.0 on-demand broker, 0.7.0 MCP image-block projection, 0.7.1 legacy-state migration + Windows command quoting, 0.7.2 agent-setup contract + lazy webserver injection, 0.7.3 DSH/Node compatibility matrix, 0.7.4 declared test script + verification/next-gate docs, 0.8.0 zero-dependency lexical tool search + browse fallback, 0.9.0 English UI, 0.10.0 browser language fallback, 0.11.0 DSH locale integration — bilingual `mcp` namespace + injected `t`, 0.12.0 no-auth HTTP mode `authMode: "none"`).
 
 ## Release
 
