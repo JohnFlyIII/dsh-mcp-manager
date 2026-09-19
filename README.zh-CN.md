@@ -117,7 +117,7 @@ mcp__odin__execute_tool     mcp__odin__list_tool_scopes
 发行版不可变且带 tag，消费者可以固定到某个版本：
 
 ```sh
-npx -p @deepseek-ai/dsh dsh plugin --profile web add github:hyqhyq3/dsh-mcp-manager#v0.12.2
+npx -p @deepseek-ai/dsh dsh plugin --profile web add github:hyqhyq3/dsh-mcp-manager#v0.12.3
 ```
 
 DSH STORE 目录额外固定完整的 40 位 commit，而不是浮动分支（0.11.0 发行 = `1d1bb9c3851db3aefb7dd6c54a9a9dda4e4c8781`；每次推送后由商城重新固定最新发行版）。
@@ -137,6 +137,8 @@ DSH STORE 目录额外固定完整的 40 位 commit，而不是浮动分支（0.
 0.12.1 的 OAuth 发现流程遵循 MCP 授权链（401 → `resource_metadata` → 受保护资源文档 → 授权服务器元数据，并对带路径前缀的 issuer（如 `https://<ref>.supabase.co/auth/v1`）使用 RFC 8414 路径插入形式）。由基于 stub context 的 `apply()` API 测试覆盖：本地 HTTP stub 提供整条链路，断言动态客户端注册请求打到公布的 `registration_endpoint`，而不是猜测的 MCP 主机 `/register`；另一用例固定了旧的自托管路径不变。已针对 Mobbin 托管的 MCP 服务器（`https://api.mobbin.com/mcp`）手工验证到生成正确的授权 URL；浏览器往返尚未在真实 Profile 中记录。
 
 0.12.2 起，HTTP 传输层会跟随且仅跟随一次同源 `307`/`308` 重定向（如带尾斜杠的 `https://api.mobbin.com/mcp/` 会被 `308 → /mcp` 归一化；此前 `initialize` 会在重定向响应上失败）。跨源重定向仍然绝不跟随，避免把 `Authorization` 头泄露给其他主机。由基于 stub context 的 `apply()` API 测试覆盖（本地 stub 返回重定向），并附带一个必须继续失败的跨源用例。
+
+0.12.3 起，每次开始 OAuth 都会读取受保护资源文档，而不仅在 MCP 源自身没有元数据时才读：Perplexity 等提供方把授权服务器元数据发布在 MCP 源上，却仍拒绝缺少 `scope` 的授权请求（`invalid_request: The scope of your request is missing`）。scope 的优先级为 `WWW-Authenticate` 的 `scope` 参数，其次是受保护资源的 `scopes_supported`；绝不整体请求授权服务器更宽的 `scopes_supported`。由 `test/oauth-discovery.test.js` 中一个 Perplexity 形态的 stub 覆盖。
 
 下一个门禁：真实 Profile 的回读（解析出的版本、运行进程、设置 → MCP 页面可见），以及在分发场景下对已打 tag 产物的免登录回读。在这些证据补齐之前，兼容性声明只代表一次性 Profile 的验证结果，**不代表**你的实际安装已被验证；DSH STORE 的上架状态同理。
 

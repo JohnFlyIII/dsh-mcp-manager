@@ -179,7 +179,47 @@ it('still uses root-level authorization-server metadata on the MCP origin when p
     assert.equal(`${authorize.origin}${authorize.pathname}`, `${stub.base}/oauth/authorize/`);
     assert.equal(authorize.searchParams.get('client_id'), 'cid-self-hosted');
     assert.equal(authorize.searchParams.get('scope'), null, 'no scope is invented when the resource advertises none');
-    assert.ok(!stub.hits.some((hit) => hit.startsWith('GET /.well-known/oauth-protected-resource')), 'resource metadata is only consulted when the origin has no metadata of its own');
+    assert.ok(!stub.hits.includes('POST /oauth/register') && !stub.hits.includes('POST /register'), 'no registration endpoint is guessed');
+  } finally {
+    await stub.close();
+  }
+});
+
+/**
+ * Perplexity-shaped provider: AS metadata is published on the MCP origin
+ * itself (so the origin resolves on its own), but the authorize endpoint
+ * rejects requests without a scope, and the only place the required scope is
+ * advertised is the root-level protected-resource document.
+ */
+function originIsAuthServerWithRequiredScopeRoutes(server) {
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const json = { 'Content-Type': 'application/json' };
+  return {
+    'POST /mcp': [401, { 'WWW-Authenticate': `Bearer resource_metadata="${base}/.well-known/oauth-protected-resource"`, ...json }, { error: 'unauthorized' }],
+    'GET /.well-known/oauth-protected-resource': [200, json, { resource: base, authorization_servers: [base], scopes_supported: ['perplexity_api'], bearer_methods_supported: ['header'] }],
+    'GET /.well-known/oauth-authorization-server': [200, json, {
+      issuer: base,
+      authorization_endpoint: `${base}/oauth/authorize`,
+      token_endpoint: `${base}/oauth/token`,
+      registration_endpoint: `${base}/oauth/register`,
+      scopes_supported: ['perplexity_api', 'offline_access'],
+    }],
+    'POST /oauth/register': [201, json, { client_id: 'cid-perplexity-like' }],
+  };
+}
+
+it("requests the protected resource's scopes even when the MCP origin is its own authorization server", async () => {
+  const stub = await startStub(originIsAuthServerWithRequiredScopeRoutes);
+  const { handler } = makeCtx();
+  try {
+    const created = await request(handler, 'POST', '/mcp-manager/api/servers', { name: 'perplexity-like', type: 'http', url: `${stub.base}/mcp`, authMode: 'oauth' });
+    assert.equal(created.code, 201);
+    const started = await request(handler, 'POST', `/mcp-manager/api/servers/${created.json.server.id}/auth`);
+    assert.equal(started.code, 200, JSON.stringify(started.json));
+    const authorize = new URL(started.json.authorizeUrl);
+    assert.equal(`${authorize.origin}${authorize.pathname}`, `${stub.base}/oauth/authorize`);
+    assert.equal(authorize.searchParams.get('client_id'), 'cid-perplexity-like');
+    assert.equal(authorize.searchParams.get('scope'), 'perplexity_api', "scope comes from the protected resource, not from the AS's broader scopes_supported");
   } finally {
     await stub.close();
   }
