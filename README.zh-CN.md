@@ -6,7 +6,7 @@
 
 内置的 `@deepseek-ai/dsh-mcp-client` 只接受静态 `headers` 配置——不支持 OAuth，也不支持本地 stdio 进程。本插件补上这块：
 
-- **OAuth（授权码 + PKCE）**：RFC 7591 动态客户端注册、`refresh_token` 自动轮换、重启后自动重连——浏览器登录一次，之后一直可用。
+- **OAuth（授权码 + PKCE）**：RFC 7591 动态客户端注册、RFC 9728 受保护资源元数据发现（读取 MCP 服务器的 `WWW-Authenticate: Bearer resource_metadata=…` 提示与 `/.well-known/oauth-protected-resource`，自动找到独立部署的授权服务器，例如 Supabase Auth）、RFC 8414 带路径前缀的元数据查找、`refresh_token` 自动轮换、重启后自动重连——浏览器登录一次，之后一直可用。
 - **静态 Bearer Token** 模式：适配没有 OAuth 的服务器——以环境变量**名称**（Codex 风格 `tokenEnv`）引用，token 明文不落盘。
 - **无鉴权**模式：适配完全不需要凭据的服务器（例如本机 `http://127.0.0.1:9316/mcp`）——插件不发送 `Authorization` 头，保存后直接连接。
 - **自定义 HTTP 标头**：`headers`（直接值）+ `headerEnv`（值取自环境变量），对齐 Codex 的 `http_headers` / `env_http_headers`。
@@ -117,7 +117,7 @@ mcp__odin__execute_tool     mcp__odin__list_tool_scopes
 发行版不可变且带 tag，消费者可以固定到某个版本：
 
 ```sh
-npx -p @deepseek-ai/dsh dsh plugin --profile web add github:hyqhyq3/dsh-mcp-manager#v0.12.0
+npx -p @deepseek-ai/dsh dsh plugin --profile web add github:hyqhyq3/dsh-mcp-manager#v0.12.1
 ```
 
 DSH STORE 目录额外固定完整的 40 位 commit，而不是浮动分支（0.11.0 发行 = `1d1bb9c3851db3aefb7dd6c54a9a9dda4e4c8781`；每次推送后由商城重新固定最新发行版）。
@@ -133,6 +133,8 @@ DSH STORE 目录额外固定完整的 40 位 commit，而不是浮动分支（0.
 0.11.0 的 locale 契约由客户端/API stub 测试覆盖。一次性 Profile 的 CLI 安装成功，但 web 启动被沙箱阻止（`listen EPERM 127.0.0.1:3080`），因此尚未验证浏览器中的实时语言切换。
 
 0.12.0 的无鉴权模式由基于 stub context 的 `apply()` API 测试（本地无鉴权 stub 会记录每次请求的 `Authorization` 头）与 client-locale 测试覆盖；尚未在真实 Profile 中实测。
+
+0.12.1 的 OAuth 发现流程遵循 MCP 授权链（401 → `resource_metadata` → 受保护资源文档 → 授权服务器元数据，并对带路径前缀的 issuer（如 `https://<ref>.supabase.co/auth/v1`）使用 RFC 8414 路径插入形式）。由基于 stub context 的 `apply()` API 测试覆盖：本地 HTTP stub 提供整条链路，断言动态客户端注册请求打到公布的 `registration_endpoint`，而不是猜测的 MCP 主机 `/register`；另一用例固定了旧的自托管路径不变。已针对 Mobbin 托管的 MCP 服务器（`https://api.mobbin.com/mcp`）手工验证到生成正确的授权 URL；浏览器往返尚未在真实 Profile 中记录。
 
 下一个门禁：真实 Profile 的回读（解析出的版本、运行进程、设置 → MCP 页面可见），以及在分发场景下对已打 tag 产物的免登录回读。在这些证据补齐之前，兼容性声明只代表一次性 Profile 的验证结果，**不代表**你的实际安装已被验证；DSH STORE 的上架状态同理。
 

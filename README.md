@@ -6,7 +6,7 @@
 
 The built-in `@deepseek-ai/dsh-mcp-client` only accepts a static `headers` config — it has no OAuth support and no local stdio transport. This plugin fills that gap:
 
-- **OAuth (authorization code + PKCE)** with RFC 7591 dynamic client registration, `refresh_token` rotation, and auto-reconnect across restarts — one browser login, then it keeps working.
+- **OAuth (authorization code + PKCE)** with RFC 7591 dynamic client registration, RFC 9728 protected-resource discovery (the MCP server's `WWW-Authenticate: Bearer resource_metadata=…` hint and `/.well-known/oauth-protected-resource`, so a separate authorization server such as Supabase Auth is found automatically), RFC 8414 path-aware metadata lookup, `refresh_token` rotation, and auto-reconnect across restarts — one browser login, then it keeps working.
 - **Static Bearer token** mode for servers without OAuth — stored as an environment-variable **name** (Codex-style `tokenEnv`), never as plaintext in the config.
 - **No auth** mode for servers that need no credentials at all (e.g. a local `http://127.0.0.1:9316/mcp`) — the plugin sends no `Authorization` header and connects on save.
 - **Custom HTTP headers** (`headers` for direct values, `headerEnv` for values read from environment variables) — matches Codex's `http_headers` / `env_http_headers`.
@@ -117,7 +117,7 @@ Global servers (added in **Settings → MCP**) are visible in every workspace. U
 Releases are immutable and tagged, so consumers can pin one:
 
 ```sh
-npx -p @deepseek-ai/dsh dsh plugin --profile web add github:hyqhyq3/dsh-mcp-manager#v0.12.0
+npx -p @deepseek-ai/dsh dsh plugin --profile web add github:hyqhyq3/dsh-mcp-manager#v0.12.1
 ```
 
 The DSH STORE catalog additionally pins a full 40-character commit instead of a floating branch (release 0.11.0 = `1d1bb9c3851db3aefb7dd6c54a9a9dda4e4c8781`; the store re-pins the newest release after each push).
@@ -133,6 +133,8 @@ What is verified today, and what is not:
 For 0.11.0, the locale contract is covered by the stubbed client/API tests. A disposable-profile CLI install succeeded, but the web boot was blocked by the sandbox (`listen EPERM 127.0.0.1:3080`), so live browser language switching remains unverified.
 
 For 0.12.0, the no-auth mode is covered by the stubbed `apply()` API test (an unauthenticated local stub records the `Authorization` header of every request) and by the client-locale test. It has not been exercised in a live profile yet.
+
+For 0.12.1, OAuth discovery follows the MCP authorization chain (401 → `resource_metadata` → protected-resource document → authorization-server metadata, with RFC 8414 path-insertion for issuers such as `https://<ref>.supabase.co/auth/v1`). It is covered by a stubbed `apply()` API test that serves the whole chain from a local HTTP stub and asserts that dynamic client registration hits the advertised `registration_endpoint`, never a guessed `/register` on the MCP host; a second case pins the legacy self-hosted path. Verified manually against Mobbin's hosted MCP server (`https://api.mobbin.com/mcp`) up to a correct authorize URL; the browser round trip has not been recorded in a live profile yet.
 
 Next gate: a real-profile readback (resolved version, running process, visible Settings → MCP page) plus, for distribution, an unauthenticated readback of the tagged artifacts. Until those are recorded, read the compatibility declarations as disposable-profile verification only — not as proof of a live installation. The same applies to listing status on DSH STORE.
 
