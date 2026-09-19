@@ -117,7 +117,7 @@ Global servers (added in **Settings → MCP**) are visible in every workspace. U
 Releases are immutable and tagged, so consumers can pin one:
 
 ```sh
-npx -p @deepseek-ai/dsh dsh plugin --profile web add github:hyqhyq3/dsh-mcp-manager#v0.12.1
+npx -p @deepseek-ai/dsh dsh plugin --profile web add github:hyqhyq3/dsh-mcp-manager#v0.12.2
 ```
 
 The DSH STORE catalog additionally pins a full 40-character commit instead of a floating branch (release 0.11.0 = `1d1bb9c3851db3aefb7dd6c54a9a9dda4e4c8781`; the store re-pins the newest release after each push).
@@ -135,6 +135,8 @@ For 0.11.0, the locale contract is covered by the stubbed client/API tests. A di
 For 0.12.0, the no-auth mode is covered by the stubbed `apply()` API test (an unauthenticated local stub records the `Authorization` header of every request) and by the client-locale test. It has not been exercised in a live profile yet.
 
 For 0.12.1, OAuth discovery follows the MCP authorization chain (401 → `resource_metadata` → protected-resource document → authorization-server metadata, with RFC 8414 path-insertion for issuers such as `https://<ref>.supabase.co/auth/v1`). It is covered by a stubbed `apply()` API test that serves the whole chain from a local HTTP stub and asserts that dynamic client registration hits the advertised `registration_endpoint`, never a guessed `/register` on the MCP host; a second case pins the legacy self-hosted path. Verified manually against Mobbin's hosted MCP server (`https://api.mobbin.com/mcp`) up to a correct authorize URL; the browser round trip has not been recorded in a live profile yet.
+
+For 0.12.2, the HTTP transport follows exactly one same-origin `307`/`308` redirect (a trailing-slash URL such as `https://api.mobbin.com/mcp/` is answered with `308 → /mcp`; previously `initialize` failed on the redirect body). Cross-origin redirects are still never followed, so the `Authorization` header cannot leak to another host. Covered by a stubbed `apply()` API test with a redirecting local stub, plus a cross-origin case that must keep failing.
 
 Next gate: a real-profile readback (resolved version, running process, visible Settings → MCP page) plus, for distribution, an unauthenticated readback of the tagged artifacts. Until those are recorded, read the compatibility declarations as disposable-profile verification only — not as proof of a live installation. The same applies to listing status on DSH STORE.
 
