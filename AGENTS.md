@@ -60,19 +60,20 @@ Two of its hard blockers are reviewed false positives here and must not be "fixe
 
 ## Release
 
-Every user-visible change ships as a versioned release: bump the version, sync the docs, commit, then **tag** so consumers can pin `dsh plugin add <repo>#<ref>`. Steps:
+Every user-visible change ships as a versioned release: bump the version, sync the docs, merge, then **tag** so consumers can pin `dsh plugin add <repo>#<ref>`. Publishing a release (pushing its tag) needs John's go-ahead. Steps:
 
-1. Bump `version` in `package.json` (semver).
+1. On a feature branch, bump `version` in `package.json` (semver).
 2. Update `README.md` and `README.zh-CN.md` — keep both in sync with the behavior change.
-3. Commit on `main`, then create an **annotated** tag on that exact commit and push both:
+3. Commit on the feature branch and open a pull request; John merges it into `main`.
+4. After the merge, create an **annotated** tag on the exact merged commit and push only the tag:
 
    ```sh
-   git tag -a v0.5.0 -m "dsh-mcp-manager v0.5.0: <one-line summary>"
-   git push origin main v0.5.0
+   git fetch origin && git tag -a v0.5.0 -m "dsh-mcp-manager v0.5.0: <one-line summary>" <merged-commit-sha>
+   git push origin v0.5.0
    ```
 
 - Tags are **annotated**, not lightweight — match the existing `v0.2.0` style (a `tagger` plus a one-line message).
-- The tag must point at the commit that actually carries the release (on `main`).
+- The tag must point at the merged commit on `main` that actually carries the release.
 - Every `vX.Y.Z` gets a tag — never ship a version without one.
 
 ## Gotchas
